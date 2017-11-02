@@ -1,14 +1,43 @@
-
+# -*- coding: utf-8 -*-
 
 import numpy as np
 import scipy.spatial.distance as spd
+from .. import simimeasures.cy as cy
+from .. import simimeasures.py as py
 
 
-class RFSE_Wrapped(object):
+class RFSE(object):
 
-    def __init__(self, similarity_func, sim_min_value, genres, bagging):
-        self.similarity_func = similarity_func
-        self.sim_min_value = sim_min_value
+    def __init__(self, sim_func, genres, itrs, feat_size, bagging=0.0):
+
+        if sim_func == 'cosine_sim':
+            self.sim_func = cy.cosine_sim
+            self.sim_min_value = -1.0
+        elif sim_func == 'eucl_sim':
+            self.sim_func = cy.eucl_sim
+            self.sim_min_value = 0.0
+        # elif sim_func == 'minmax_sim':
+        #     self.sim_func = cy.minmax_sim
+        #     self.sim_min_value = 0.0
+        elif sim_func == 'py_cosine_sim':
+            self.sim_func = py.cosine_sim
+            self.sim_min_value = -1.0
+        elif sim_func == 'py_cos_sim_sprs':
+            self.sim_func = py.cos_sim_sprs
+            self.sim_min_value = -1.0
+        elif sim_func == 'py_minmax_sim':
+            self.sim_func = py.minmax_sim
+            self.sim_min_value = 0.0
+        elif sim_func == 'py_jaccard_sim':
+            self.sim_func = py.jaccard_sim
+            self.sim_min_value = 0.0
+        elif sim_func == 'py_hamming_sim':
+            self.sim_func = py.hamming_sim
+            self.sim_min_value = 0.0
+        elif simfunc == 'py_correl_sim':
+            self.sim_func = py.correl_sim
+            self.sim_min_value = 0.0
+
         self.genres_lst = genres
         self.gnrs_num = len(genres)
 
@@ -19,7 +48,11 @@ class RFSE_Wrapped(object):
 
         self.bagging = bagging
 
-    def contruct_classes(self, trn_idxs, corpus_mtrx, cls_gnr_tgs, bagging_param=None):
+        # RFSE paramters
+        self.itrs = itrs
+        self.feat_size = feat_size
+
+    def fit(self, trn_idxs, corpus_mtrx_lst, cls_gnr_tgs):
         inds_per_gnr = dict()
         # inds = list()
         last_gnr_tag = None
@@ -32,7 +65,7 @@ class RFSE_Wrapped(object):
         gnr_classes = dict()
         for g, inds in inds_per_gnr.items():
 
-            if self.bagging and bagging_param:
+            if self.bagging:
                 # # # # # # #
                 shuffled_train_idxs = np.random.permutation(inds)
                 # print shuffled_train_idxs
@@ -42,7 +75,7 @@ class RFSE_Wrapped(object):
                 bag_idxs = shuffled_train_idxs[0:bg_trn_ptg]
                 # print bag_idxs
 
-            elif not self.bagging and not bagging_param:
+            elif not self.bagging:
                 bag_idxs = inds
 
             else:
@@ -51,7 +84,7 @@ class RFSE_Wrapped(object):
                 )
 
             # Merge All Term-Frequency Dictionaries created by the Raw Texts
-            gnr_classes[g] = corpus_mtrx[bag_idxs, :].mean(axis=0)
+            gnr_classes[g] = corpus_mtrx_lst[self.gnrlst_idx[g]][bag_idxs, :].mean(axis=0)
 
         return gnr_classes
 
@@ -85,23 +118,23 @@ class RFSE_Wrapped(object):
         # Get the part of matrices required for the model prediction phase.
         # ###crossval_Y =  cls_gnr_tgs [crv_idxs, :]
 
-        max_sim_scores_per_iter = np.zeros((params['Iterations'], crossval_X.shape[0]))
-        predicted_classes_per_iter = np.zeros((params['Iterations'], crossval_X.shape[0]))
+        max_sim_scores_per_iter = np.zeros((self.itrs, crossval_X.shape[0]))
+        predicted_classes_per_iter = np.zeros((self.itrs, crossval_X.shape[0]))
 
         # Measure similarity for i iterations i.e. for i different feature subspaces Randomly...
         # ...selected
-        for I in range(params['Iterations']):
+        for i in range(self.itrs):
 
             # print "Construct classes"
             # Construct Genres Class Vectors form Training Set. In case self.bagging is True.
             if self.bagging:
                 gnr_classes = self.contruct_classes(
-                    trn_idxs, corpus_mtrx, cls_gnr_tgs, params['Bagging']
+                    trn_idxs, corpus_mtrx, cls_gnr_tgs, self.bagging
                 )
 
             # Randomly select some of the available features
             shuffled_vocabilary_idxs = np.random.permutation(np.arange(crossval_X.shape[1]))
-            features_subspace = shuffled_vocabilary_idxs[0: params['features_size']]
+            features_subspace = shuffled_vocabilary_idxs[0: self.feat_size]
 
             # Initialized Predicted Classes and Maximum Similarity Scores Array for this i iteration
             predicted_classes = np.zeros(crossval_X.shape[0])
@@ -128,12 +161,12 @@ class RFSE_Wrapped(object):
                     if gnr_classes[g].ndim == 2:
                         # This case is called when a Sparse Matrix is used which is alway 2D...
                         # ...with first dim == 1
-                        sim_score = self.similarity_func(vect, gnr_classes[g][:, features_subspace])
+                        sim_score = self.sim_func(vect, gnr_classes[g][:, features_subspace])
 
                     elif gnr_classes[g].ndim == 1:
                         # This case is called when a Array or pyTables-Array is used which it...
                         # ...this case should be 1D
-                        sim_score = self.similarity_func(vect, gnr_classes[g][features_subspace])
+                        sim_score = self.sim_func(vect, gnr_classes[g][features_subspace])
 
                     else:
                         raise Exception(
@@ -154,8 +187,8 @@ class RFSE_Wrapped(object):
                         max_sim = sim_score
 
             # Store Predicted Classes and Scores for this i iteration
-            max_sim_scores_per_iter[I, :] = max_sim_scores[:]
-            predicted_classes_per_iter[I, :] = predicted_classes[:]
+            max_sim_scores_per_iter[i, :] = max_sim_scores[:]
+            predicted_classes_per_iter[i, :] = predicted_classes[:]
 
         predicted_Y = np.zeros((crossval_X.shape[0]), dtype=np.float)
         predicted_scores = np.zeros((crossval_X.shape[0]), dtype=np.float)
@@ -164,7 +197,7 @@ class RFSE_Wrapped(object):
             genres_occs = np.histogram(prd_cls.astype(np.int), bins=np.arange(self.gnrs_num+2))[0]
             # NOTE: One Bin per Genre plus one i.e the first to be always zero
             # print genres_occs
-            genres_probs = genres_occs.astype(np.float) / np.float(params['Iterations'])
+            genres_probs = genres_occs.astype(np.float) / np.float(self.itrs)
             # print genres_probs
             if np.max(genres_probs) >= params['Sigma']:
                 predicted_Y[i_prd_cls] = np.argmax(genres_probs)
@@ -172,91 +205,13 @@ class RFSE_Wrapped(object):
 
         return predicted_Y, predicted_scores, max_sim_scores_per_iter, predicted_classes_per_iter
 
-    def eval(self, *args):
 
-        # Get Input arguments in given sequence
-        trn_idxs = args[0]
-        crv_idxs = args[1]
-        corpus_mtrx = args[2]
-        cls_gnr_tgs = args[3]
-        params = args[4]
+class RFSEDMPG(RFSE):
 
-        if self.bagging:
-            # Execute predict() with 'trn_idxs' and 'cls_gnr_tgs' arguments which triggers...
-            # ...Bagging mode of RFSE
-            results = self.predict(
-                crv_idxs, corpus_mtrx, cls_gnr_tgs, params, trn_idxs
-            )
+    def __init__(self, *args, **kwrgs):
 
-        else:
-            # Build Genre Classes given the training vectors
-            gnr_classes = self.contruct_classes(trn_idxs, corpus_mtrx, cls_gnr_tgs)
-
-            # Execute predict() with gnr_classes which triggers simple RFSE (non Bagging)
-            results = self.predict(
-                crv_idxs, corpus_mtrx, cls_gnr_tgs, params, gnr_classes
-            )
-
-        # Return results as expected form ParamGridCrossValBase class
-        return {
-            'predicted_Y': results[0],
-            'predicted_scores': results[1],
-            'max_sim_scores_per_iter': results[2],
-            'predicted_classes_per_iter': results[3]
-        }
-
-
-class RFSEDMPG_Wrapped(object):
-
-    def __init__(self, similarity_func, sim_min_value, genres, bagging):
-        self.similarity_func = similarity_func
-        self.sim_min_value = sim_min_value
-        self.genres_lst = genres
-        self.gnrlst_idx = dict([(g, i) for i, g in enumerate(genres)])
-        self.gnrs_num = len(genres)
-
-        if bagging:
-            print 'Init: RFSE with Bagging'
-        else:
-            print 'Init: RFSE'
-
-        self.bagging = bagging
-
-    def contruct_classes(self, trn_idxs, corpus_mtrx_lst, cls_gnr_tgs, bagging_param=None):
-        inds_per_gnr = dict()
-        # inds = list()
-        last_gnr_tag = None
-
-        for gnr_tag in np.unique(cls_gnr_tgs[trn_idxs]):
-            inds_per_gnr[self.genres_lst[gnr_tag - 1]] = trn_idxs[
-                np.where(cls_gnr_tgs[trn_idxs] == gnr_tag)[0]
-            ]
-
-        gnr_classes = dict()
-        for g, inds in inds_per_gnr.items():
-
-            if self.bagging and bagging_param:
-                # # # # # # #
-                shuffled_train_idxs = np.random.permutation(inds)
-                # print shuffled_train_idxs
-                # keep bagging_parram percent
-                bg_trn_ptg = int(np.trunc(shuffled_train_idxs.size * bagging_param))
-                # print bg_trn_ptg
-                bag_idxs = shuffled_train_idxs[0:bg_trn_ptg]
-                # print bag_idxs
-
-            elif not self.bagging and not bagging_param:
-                bag_idxs = inds
-
-            else:
-                raise Exception(
-                    'contruct_classes(): Bagging triggerd with not bagging_param argument'
-                )
-
-            # Merge All Term-Frequency Dictionaries created by the Raw Texts
-            gnr_classes[g] = corpus_mtrx_lst[self.gnrlst_idx[g]][bag_idxs, :].mean(axis=0)
-
-        return gnr_classes
+        # Initializing RFSE.
+        super(RFSEDMPG, self).__init__(*args, **kwrgs)
 
     def predict(self, *args):
 
@@ -281,8 +236,8 @@ class RFSEDMPG_Wrapped(object):
 
         # Get the part of matrices or arrays required for the model prediction phase.
         # crossval_X = corpus_mtrx_lst[self.gnrlst_idx[g]][crv_idxs, :]
-        # NOTE: EXTREMELY IMPORTANT! corpus_mtrx_lst[X] where X=[<idx1>,<idx2>,...,<idxN>] returns...
-        # ...ERROR HDF5 when using pytables Earray.  For scipy.sparse there is no such a...
+        # NOTE: EXTREMELY IMPORTANT! corpus_mtrx_lst[X] where X=[<idx1>,<idx2>,...,<idxN>]...
+        # returns ERROR HDF5 when using pytables Earray.  For scipy.sparse there is no such a...
         # ...problem. Therefore it always should be used this expression corpus_mtrx_lst[X, :]
 
         # Get the part of matrices required for the model prediction phase.
@@ -291,12 +246,12 @@ class RFSEDMPG_Wrapped(object):
         crossval_len = len(crv_idxs)
         crps_mtrx_shape = corpus_mtrx_lst[0].shape
 
-        max_sim_scores_per_iter = np.zeros((params['Iterations'], crossval_len))
-        predicted_classes_per_iter = np.zeros((params['Iterations'], crossval_len))
+        max_sim_scores_per_iter = np.zeros((self.itrs, crossval_len))
+        predicted_classes_per_iter = np.zeros((self.itrs, crossval_len))
 
         # Measure similarity for i iterations i.e. for i different feature subspaces Randomly...
         # ...selected
-        for I in range(params['Iterations']):
+        for i in range(self.itrs):
 
             # print "Construct classes"
             # Construct Genres Class Vectors form Training Set. In case self.bagging is True.
@@ -307,7 +262,7 @@ class RFSEDMPG_Wrapped(object):
 
             # Randomly select some of the available features
             shuffled_vocabilary_idxs = np.random.permutation(np.arange(crps_mtrx_shape[1]))
-            features_subspace = shuffled_vocabilary_idxs[0: params['features_size']]
+            features_subspace = shuffled_vocabilary_idxs[0: self.feat_size]
 
             # Initialized Predicted Classes and Maximum Similarity Scores Array for this i iteration
             predicted_classes = np.zeros(crossval_len)
@@ -338,12 +293,12 @@ class RFSEDMPG_Wrapped(object):
                     if gnr_classes[g].ndim == 2:
                         # This case is called when a Sparse Matrix is used which is alway 2D...
                         # ...with first dim == 1
-                        sim_score = self.similarity_func(vect, gnr_classes[g][:, features_subspace])
+                        sim_score = self.sim_func(vect, gnr_classes[g][:, features_subspace])
 
                     elif gnr_classes[g].ndim == 1:
                         # This case is called when a Array or pyTables-Array is used which it...
                         # ...this case should be 1D
-                        sim_score = self.similarity_func(vect, gnr_classes[g][features_subspace])
+                        sim_score = self.sim_func(vect, gnr_classes[g][features_subspace])
 
                     else:
                         raise Exception(
@@ -364,8 +319,8 @@ class RFSEDMPG_Wrapped(object):
                         max_sim = sim_score
 
             # Store Predicted Classes and Scores for this i iteration
-            max_sim_scores_per_iter[I, :] = max_sim_scores[:]
-            predicted_classes_per_iter[I, :] = predicted_classes[:]
+            max_sim_scores_per_iter[i, :] = max_sim_scores[:]
+            predicted_classes_per_iter[i, :] = predicted_classes[:]
 
         predicted_Y = np.zeros((crossval_len), dtype=np.float)
         predicted_scores = np.zeros((crossval_len), dtype=np.float)
@@ -374,46 +329,13 @@ class RFSEDMPG_Wrapped(object):
             genres_occs = np.histogram(prd_cls.astype(np.int), bins=np.arange(self.gnrs_num+2))[0]
             # NOTE: One Bin per Genre plus one i.e the first to be always zero
             # print genres_occs
-            genres_probs = genres_occs.astype(np.float) / np.float(params['Iterations'])
+            genres_probs = genres_occs.astype(np.float) / np.float(self.itrs)
             # print genres_probs
             if np.max(genres_probs) >= params['Sigma']:
                 predicted_Y[i_prd_cls] = np.argmax(genres_probs)
                 predicted_scores[i_prd_cls] = np.max(genres_probs)
 
         return predicted_Y, predicted_scores, max_sim_scores_per_iter, predicted_classes_per_iter
-
-    def eval(self, *args):
-
-        # Get Input arguments in given sequence
-        trn_idxs = args[0]
-        crv_idxs = args[1]
-        corpus_mtrx_lst = args[2]
-        cls_gnr_tgs = args[3]
-        params = args[4]
-
-        if self.bagging:
-            # Execute predict() with 'trn_idxs' and 'cls_gnr_tgs' arguments which triggers...
-            # ...Bagging mode of RFSE
-            results = self.predict(
-                crv_idxs, corpus_mtrx_lst, cls_gnr_tgs, params, trn_idxs
-            )
-
-        else:
-            # Build Genre Classes given the training vectors
-            gnr_classes = self.contruct_classes(trn_idxs, corpus_mtrx_lst, cls_gnr_tgs)
-
-            # Execute predict() with gnr_classes which triggers simple RFSE (non Bagging)
-            results = self.predict(
-                crv_idxs, corpus_mtrx_lst, cls_gnr_tgs, params, gnr_classes
-            )
-
-        # Return results as expected form ParamGridCrossValBase class
-        return {
-            'predicted_Y': results[0],
-            'predicted_scores': results[1],
-            'max_sim_scores_per_iter': results[2],
-            'predicted_classes_per_iter': results[3]
-        }
 
 
 def cosine_similarity(vector, centroid):

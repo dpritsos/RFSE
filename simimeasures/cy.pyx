@@ -11,7 +11,7 @@ import numpy as np
 cdef extern from "math.h":
     cdef double sqrt(double x) nogil
 
-
+# TO BECOME ===> cosine_sim,
 cpdef double [:, ::1] cosdis_2d(double [:, ::1] m1, double [:, ::1] m2):
 
     cdef:
@@ -96,7 +96,7 @@ cpdef double [:, ::1] cosdis_2d(double [:, ::1] m1, double [:, ::1] m2):
 
     return csdis_vect
 
-
+# To Become ===> eucl_sim
 cpdef double [:, ::1] eudis_2d(double [:, ::1] m1, double [:, ::1] m2):
 
     cdef:
