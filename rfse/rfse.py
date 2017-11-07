@@ -8,7 +8,7 @@ from .. import simimeasures.py as py
 
 class RFSE(object):
 
-    def __init__(self, sim_func, genres, itrs, feat_size, bagging=0.0):
+    def __init__(self, sim_func, itrs, sigma, feat_size, bagging=0.0):
 
         if sim_func == 'cosine_sim':
             self.sim_func = cy.cosine_sim
@@ -50,43 +50,37 @@ class RFSE(object):
 
         # RFSE paramters
         self.itrs = itrs
+        self.sigma = sigma
         self.feat_size = feat_size
 
-    def fit(self, trn_idxs, corpus_mtrx_lst, cls_gnr_tgs):
-        inds_per_gnr = dict()
-        # inds = list()
-        last_gnr_tag = None
+        self.gnr_classes = dict()
 
-        for gnr_tag in np.unique(cls_gnr_tgs[trn_idxs]):
-            inds_per_gnr[self.genres_lst[gnr_tag - 1]] = trn_idxs[
-                np.where(cls_gnr_tgs[trn_idxs] == gnr_tag)[0]
-            ]
+    def fit(self, trn_mtrx, cls_tgs):
+        # It should be cls_tgs = cls_gnr_tgs[cls_tgs]
+        # It should be trn_mtrx corpus_mtrx_lst[cls_tgs]
 
-        gnr_classes = dict()
-        for g, inds in inds_per_gnr.items():
+        if not self.bagging:
 
-            if self.bagging:
+            for gnr_tag in np.unique(cls_gnr_tgs[trn_idxs]):
+                # self.genres_lst[gnr_tag - 1]
+                gnr_classes[gnr_tag] = trn_mtrx[np.where((cls_tgs == gnr_tag))].mean(axis=0)
+
+        else:
+
+            for gnr_tag in np.unique(cls_gnr_tgs[trn_idxs]):
+
                 # # # # # # #
-                shuffled_train_idxs = np.random.permutation(inds)
+                shuffled_train_idxs = np.random.permutation(np.where((cls_tgs == gnr_tag)))
                 # print shuffled_train_idxs
                 # keep bagging_parram percent
                 bg_trn_ptg = int(np.trunc(shuffled_train_idxs.size * bagging_param))
                 # print bg_trn_ptg
-                bag_idxs = shuffled_train_idxs[0:bg_trn_ptg]
+                bagg_idxs = shuffled_train_idxs[0:bg_trn_ptg]
                 # print bag_idxs
 
-            elif not self.bagging:
-                bag_idxs = inds
+                gnr_classes[gnr_tag] = trn_mtrx[bagg_idxs].mean(axis=0)
 
-            else:
-                raise Exception(
-                    'contruct_classes(): Bagging triggerd with not bagging_param argument'
-                )
-
-            # Merge All Term-Frequency Dictionaries created by the Raw Texts
-            gnr_classes[g] = corpus_mtrx_lst[self.gnrlst_idx[g]][bag_idxs, :].mean(axis=0)
-
-        return gnr_classes
+        return self.gnr_classes
 
     def predict(self, *args):
 
@@ -94,7 +88,6 @@ class RFSE(object):
         crv_idxs = args[0]
         corpus_mtrx = args[1]
         cls_gnr_tgs = args[2]
-        params = args[3]
 
         # Store the argument 5 (6th) to the proper variable
         if self.bagging and isinstance(args[4], np.ndarray):
@@ -199,7 +192,7 @@ class RFSE(object):
             # print genres_occs
             genres_probs = genres_occs.astype(np.float) / np.float(self.itrs)
             # print genres_probs
-            if np.max(genres_probs) >= params['Sigma']:
+            if np.max(genres_probs) >= self.sigma:
                 predicted_Y[i_prd_cls] = np.argmax(genres_probs)
                 predicted_scores[i_prd_cls] = np.max(genres_probs)
 
@@ -219,7 +212,6 @@ class RFSEDMPG(RFSE):
         crv_idxs = args[0]
         corpus_mtrx_lst = args[1]
         cls_gnr_tgs = args[2]
-        params = args[3]
 
         # Store the argument 5 (6th) to the proper variable
         if self.bagging and isinstance(args[4], np.ndarray):
@@ -257,7 +249,7 @@ class RFSEDMPG(RFSE):
             # Construct Genres Class Vectors form Training Set. In case self.bagging is True.
             if self.bagging:
                 gnr_classes = self.contruct_classes(
-                    trn_idxs, corpus_mtrx_lst, cls_gnr_tgs, params['Bagging']
+                    trn_idxs, corpus_mtrx_lst, cls_gnr_tgs, bagging
                 )
 
             # Randomly select some of the available features
@@ -331,7 +323,7 @@ class RFSEDMPG(RFSE):
             # print genres_occs
             genres_probs = genres_occs.astype(np.float) / np.float(self.itrs)
             # print genres_probs
-            if np.max(genres_probs) >= params['Sigma']:
+            if np.max(genres_probs) >= self.sigma:
                 predicted_Y[i_prd_cls] = np.argmax(genres_probs)
                 predicted_scores[i_prd_cls] = np.max(genres_probs)
 
