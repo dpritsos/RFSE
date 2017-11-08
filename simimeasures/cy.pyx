@@ -11,8 +11,7 @@ import numpy as np
 cdef extern from "math.h":
     cdef double sqrt(double x) nogil
 
-# TO BECOME ===> cosine_sim,
-cpdef double [:, ::1] cosdis_2d(double [:, ::1] m1, double [:, ::1] m2):
+cpdef double [:, ::1] cosine_sim(double [:, ::1] m1, double [:, ::1] m2):
 
     cdef:
         # Matrix index variables.
@@ -28,12 +27,12 @@ cpdef double [:, ::1] cosdis_2d(double [:, ::1] m1, double [:, ::1] m2):
         # ...to be retured results.
         double [::1] m1_norms
         double [::1] m2_norms
-        double [:, ::1] csdis_vect
+        double [:, ::1] cssim_vect
 
     # Creating the temporary cython arrays.
     m1_norms = cvarray(shape=(m1_I,), itemsize=sizeof(double), format="d")
     m2_norms = cvarray(shape=(m2_I,), itemsize=sizeof(double), format="d")
-    csdis_vect = cvarray(shape=(m1_I, m2_I), itemsize=sizeof(double), format="d")
+    cssim_vect = cvarray(shape=(m1_I, m2_I), itemsize=sizeof(double), format="d")
 
     # The following operatsion taking place in the non-gil and parallel...
     # ...openmp emviroment.
@@ -50,7 +49,7 @@ cpdef double [:, ::1] cosdis_2d(double [:, ::1] m1, double [:, ::1] m2):
 
         for iz in range(m1_I):
             for jz in range(m2_I):
-                csdis_vect[iz, jz] = -1.0
+                cssim_vect[iz, jz] = -1.0
 
         # Calculating the Norms for the first matrix.
         for i in prange(m1_I, schedule='guided'):
@@ -89,12 +88,12 @@ cpdef double [:, ::1] cosdis_2d(double [:, ::1] m1, double [:, ::1] m2):
 
                 # Calculating the elemnt-wise sum of products.
                 for k in range(m1_J):
-                    csdis_vect[i, j] += m1[i, k] * m2[j, k]
+                    cssim_vect[i, j] += m1[i, k] * m2[j, k]
 
                 # Normalizing with the products of the respective vector norms.
-                csdis_vect[i, j] = csdis_vect[i, j] / (m1_norms[i] * m2_norms[j])
+                cssim_vect[i, j] = cssim_vect[i, j] / (m1_norms[i] * m2_norms[j])
 
-    return csdis_vect
+    return cssim_vect
 
 # To Become ===> eucl_sim
 cpdef double [:, ::1] eudis_2d(double [:, ::1] m1, double [:, ::1] m2):

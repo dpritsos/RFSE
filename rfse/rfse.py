@@ -53,7 +53,8 @@ class RFSE(object):
         self.sigma = sigma
         self.feat_size = feat_size
 
-        self.gnr_classes = dict()
+        self.ci2gtag = dict()
+        self.gnr_classes = list()
 
     def fit(self, trn_mtrx, cls_tgs):
         # It should be cls_tgs = cls_gnr_tgs[cls_tgs]
@@ -61,11 +62,14 @@ class RFSE(object):
 
         if not self.bagging:
 
-            for gnr_tag in np.unique(cls_gnr_tgs[trn_idxs]):
-                # self.genres_lst[gnr_tag - 1]
-                gnr_classes[gnr_tag] = trn_mtrx[np.where((cls_tgs == gnr_tag))].mean(axis=0)
+            for i, gnr_tag in enumerate(np.unique(cls_gnr_tgs[trn_idxs])):
+                self.ci2gtag[i] = gnr_tag
+                gnr_classes.append(trn_mtrx[np.where((cls_tgs == gnr_tag))].mean(axis=0))
 
         else:
+
+            self.trn_mtrx = trn_mtrx
+            self.cls_tgs = cls_tgs
 
             for gnr_tag in np.unique(cls_gnr_tgs[trn_idxs]):
 
@@ -77,111 +81,44 @@ class RFSE(object):
                 # print bg_trn_ptg
                 bagg_idxs = shuffled_train_idxs[0:bg_trn_ptg]
                 # print bag_idxs
+                self.ci2gtag[i] = gnr_tag
+                gnr_classes.append(trn_mtrx[bagg_idxs].mean(axis=0))
 
-                gnr_classes[gnr_tag] = trn_mtrx[bagg_idxs].mean(axis=0)
+        # Converting the list to narray.
+        self.gnr_classes = np.vstack(self.gnr_classes)
 
         return self.gnr_classes
 
-    def predict(self, *args):
+    def predict(self, tst_mtrx):
+        # It should be tst_mtrx = corpus_mtrx[crv_idxs]
+        # It should be cls_tgs = cls_gnr_tgs[crv_idxs]
 
-        # Get Input arguments in given sequence
-        crv_idxs = args[0]
-        corpus_mtrx = args[1]
-        cls_gnr_tgs = args[2]
+        mtrx_feat_idxs = np.arange(tst_mtrx.shape[1])
 
-        # Store the argument 5 (6th) to the proper variable
-        if self.bagging and isinstance(args[4], np.ndarray):
-            trn_idxs = args[4]
-
-        elif not self.bagging and isinstance(args[4], dict):
-            gnr_classes = args[4]
-
-        else:
-            raise Exception(
-                'predict(): Invalid Argument, either bagging trigged with not train-index' +
-                'array or non-bagging with not genre-classes argument'
-            )
-
-        # Get the part of matrices or arrays required for the model prediction phase.
-        crossval_X = corpus_mtrx[crv_idxs, :]
-        # NOTE: EXTREMELY IMPORTANT! corpus_mtrx[X] where X=[<idx1>,<idx2>,...,<idxN>] returns...
-        # ...ERROR HDF5 when using pytables Earray.  For scipy.sparse there is no such a...
-        # ...problem. Therefore it always should be used this expression corpus_mtrx[X, :]
-
-        # Get the part of matrices required for the model prediction phase.
-        # ###crossval_Y =  cls_gnr_tgs [crv_idxs, :]
-
-        max_sim_scores_per_iter = np.zeros((self.itrs, crossval_X.shape[0]))
-        predicted_classes_per_iter = np.zeros((self.itrs, crossval_X.shape[0]))
+        max_sim_scores_per_iter = np.zeros((self.itrs, tst_mtrx.shape[0]))
+        predicted_classes_per_iter = np.zeros((self.itrs, tst_mtrx.shape[0]))
 
         # Measure similarity for i iterations i.e. for i different feature subspaces Randomly...
         # ...selected
         for i in range(self.itrs):
 
-            # print "Construct classes"
             # Construct Genres Class Vectors form Training Set. In case self.bagging is True.
             if self.bagging:
-                gnr_classes = self.contruct_classes(
-                    trn_idxs, corpus_mtrx, cls_gnr_tgs, self.bagging
-                )
+                gnr_classes = self.contruct_classes(self.trn_mtrx, self.cls_tgs)
 
             # Randomly select some of the available features
-            shuffled_vocabilary_idxs = np.random.permutation(np.arange(crossval_X.shape[1]))
-            features_subspace = shuffled_vocabilary_idxs[0: self.feat_size]
+            feat_subspace = np.random.permutation(mtrx_feat_idxs)[0:self.feat_size]
 
             # Initialized Predicted Classes and Maximum Similarity Scores Array for this i iteration
-            predicted_classes = np.zeros(crossval_X.shape[0])
-            max_sim_scores = np.zeros(crossval_X.shape[0])
-
-            # Measure similarity for each Cross-Validation-Set vector to each available Genre...
-            # ...Class(i.e. Class-Vector). For This feature_subspace.
-            for i_vect, vect in enumerate(crossval_X[:, features_subspace]):
-
-                # Convert TF vectors to Binary
-                # vect_bin = np.where(vect[:, :].toarray() > 0, 1, 0)
-                # NOTE: with np.where Always use A[:] > x instead of A > x in case of...
-                # ...Sparse Matrices
-                # print vect.shape
-
-                max_sim = self.sim_min_value
-                for g in gnr_classes.keys():
-
-                    # Convert TF vectors to Binary
-                    # gnr_cls_bin = np.where(gnr_classes[g][:, features_subspace] > 0, 1, 0)
-                    # print gnr_cls_bin.shape
-
-                    # Measure Similarity
-                    if gnr_classes[g].ndim == 2:
-                        # This case is called when a Sparse Matrix is used which is alway 2D...
-                        # ...with first dim == 1
-                        sim_score = self.sim_func(vect, gnr_classes[g][:, features_subspace])
-
-                    elif gnr_classes[g].ndim == 1:
-                        # This case is called when a Array or pyTables-Array is used which it...
-                        # ...this case should be 1D
-                        sim_score = self.sim_func(vect, gnr_classes[g][features_subspace])
-
-                    else:
-                        raise Exception(
-                            "Unexpected Centroid Vector Dimensions: its shape should be " +
-                            "(x,) for 1D array or (1,x) for 2D array or matrix"
-                        )
-
-                    # Just for debugging for
-                    # if sim_score < 0.0:
-                    #     print "ERROR: Similarity score unexpected value ", sim_score
-
-                    # Assign the class tag this vector is most similar and keep the respective...
-                    # ...similarity score.
-                    if sim_score > max_sim:
-                        predicted_classes[i_vect] = self.genres_lst.index(g) + 1
-                        # ###plus 1 is the real class tag 0 means uncategorized.
-                        max_sim_scores[i_vect] = sim_score
-                        max_sim = sim_score
+            max_sim_inds = np.argmax(
+                self.sim_func(tst_mtrx[:, feat_subspace], gnr_classes[:, feat_subspace]),
+                axis=1
+            )
+            max_sim_scores = tst_mtrx[max_sim_inds]
 
             # Store Predicted Classes and Scores for this i iteration
             max_sim_scores_per_iter[i, :] = max_sim_scores[:]
-            predicted_classes_per_iter[i, :] = predicted_classes[:]
+            predicted_classes_per_iter[i, :] = np.array([self.ci2gtag[i] for i in max_sim_inds[:]])
 
         predicted_Y = np.zeros((crossval_X.shape[0]), dtype=np.float)
         predicted_scores = np.zeros((crossval_X.shape[0]), dtype=np.float)
@@ -254,7 +191,7 @@ class RFSEDMPG(RFSE):
 
             # Randomly select some of the available features
             shuffled_vocabilary_idxs = np.random.permutation(np.arange(crps_mtrx_shape[1]))
-            features_subspace = shuffled_vocabilary_idxs[0: self.feat_size]
+            feat_subspace = shuffled_vocabilary_idxs[0: self.feat_size]
 
             # Initialized Predicted Classes and Maximum Similarity Scores Array for this i iteration
             predicted_classes = np.zeros(crossval_len)
@@ -275,22 +212,22 @@ class RFSEDMPG(RFSE):
 
                     # Get the part of matrices or arrays required for the model prediction phase.
                     # crossval_X[crv_i] <== Equivalent
-                    vect = corpus_mtrx_lst[self.gnrlst_idx[g]][crv_i, features_subspace]
+                    vect = corpus_mtrx_lst[self.gnrlst_idx[g]][crv_i, feat_subspace]
 
                     # Convert TF vectors to Binary
-                    # gnr_cls_bin = np.where(gnr_classes[g][:, features_subspace] > 0, 1, 0)
+                    # gnr_cls_bin = np.where(gnr_classes[g][:, feat_subspace] > 0, 1, 0)
                     # print gnr_cls_bin.shape
 
                     # Measure Similarity
                     if gnr_classes[g].ndim == 2:
                         # This case is called when a Sparse Matrix is used which is alway 2D...
                         # ...with first dim == 1
-                        sim_score = self.sim_func(vect, gnr_classes[g][:, features_subspace])
+                        sim_score = self.sim_func(vect, gnr_classes[g][:, feat_subspace])
 
                     elif gnr_classes[g].ndim == 1:
                         # This case is called when a Array or pyTables-Array is used which it...
                         # ...this case should be 1D
-                        sim_score = self.sim_func(vect, gnr_classes[g][features_subspace])
+                        sim_score = self.sim_func(vect, gnr_classes[g][feat_subspace])
 
                     else:
                         raise Exception(
