@@ -11,17 +11,18 @@ import numpy as np
 cdef extern from "math.h":
     cdef double sqrt(double x) nogil
 
-cpdef double [:, ::1] cosine_sim(double [:, ::1] m1, double [:, ::1] m2):
+cpdef double [:, ::1] cosine_sim(double [:, ::1] m1, double [:, ::1] m2, Py_ssize_t [::1] ci):
 
     cdef:
         # Matrix index variables.
-        Py_ssize_t i, j, k, iz, jz
+        Py_ssize_t i, j, k, iz, jz, ci_i
 
         # Matrices dimentions intilized variables.
         Py_ssize_t m1_I = m1.shape[0]
         Py_ssize_t m1_J = m1.shape[1]
         Py_ssize_t m2_I = m2.shape[0]
         Py_ssize_t m2_J = m2.shape[1]
+        Py_ssize_t ci_I = ci.shape[0]
 
         # MemoryViews for the cython arrays used for sotring the temporary and...
         # ...to be retured results.
@@ -55,8 +56,10 @@ cpdef double [:, ::1] cosine_sim(double [:, ::1] m1, double [:, ::1] m2):
         for i in prange(m1_I, schedule='guided'):
 
             # Calculating Sum.
-            for j in range(m1_J):
-                m1_norms[i] += m1[i, j] * m1[i, j]
+            # for j in range(m1_J):
+            #     m1_norms[i] += m1[i, j] * m1[i, j]
+            for ci_i in range(ci_I):
+                m1_norms[i] += m1[i, ci[ci_i]] * m1[i, ci[ci_i]]
 
             # Calculating the Square root of the sum
             m1_norms[i] = sqrt(m1_norms[i])
@@ -70,8 +73,10 @@ cpdef double [:, ::1] cosine_sim(double [:, ::1] m1, double [:, ::1] m2):
         for i in prange(m2_I, schedule='guided'):
 
             # Calculating Sum.
-            for j in range(m2_J):
-                m2_norms[i] += m2[i, j] * m2[i, j]
+            # for j in range(m2_J):
+            #     m2_norms[i] += m2[i, j] * m2[i, j]
+            for ci_i in range(ci_I):
+                m2_norms[i] += m2[i, ci[ci_i]] * m2[i, ci[ci_i]]
 
             # Calculating the Square root of the sum
             m2_norms[i] = sqrt(m2_norms[i])
@@ -87,8 +92,10 @@ cpdef double [:, ::1] cosine_sim(double [:, ::1] m1, double [:, ::1] m2):
             for j in range(m2_I):
 
                 # Calculating the elemnt-wise sum of products.
-                for k in range(m1_J):
-                    cssim_vect[i, j] += m1[i, k] * m2[j, k]
+                # for k in range(m1_J):
+                #     cssim_vect[i, j] += m1[i, k] * m2[j, k]
+                for ci_i in range(ci_I):
+                    cssim_vect[i, j] += m1[i, ci[ci_i]] * m2[j, ci[ci_i]]
 
                 # Normalizing with the products of the respective vector norms.
                 cssim_vect[i, j] = cssim_vect[i, j] / (m1_norms[i] * m2_norms[j])

@@ -2,8 +2,8 @@
 
 import numpy as np
 import scipy.spatial.distance as spd
-from .. import simimeasures.cy as cy
-from .. import simimeasures.py as py
+from ..simimeasures import cy as cy
+from ..simimeasures import py as py
 
 
 class RFSE(object):
@@ -38,9 +38,6 @@ class RFSE(object):
             self.sim_func = py.correl_sim
             self.sim_min_value = 0.0
 
-        self.genres_lst = genres
-        self.gnrs_num = len(genres)
-
         if bagging:
             print 'Init: RFSE with Bagging'
         else:
@@ -62,16 +59,16 @@ class RFSE(object):
 
         if not self.bagging:
 
-            for i, gnr_tag in enumerate(np.unique(cls_gnr_tgs[trn_idxs])):
+            for i, gnr_tag in enumerate(np.unique(cls_tgs)):
                 self.ci2gtag[i] = gnr_tag
-                gnr_classes.append(trn_mtrx[np.where((cls_tgs == gnr_tag))].mean(axis=0))
+                self.gnr_classes.append(trn_mtrx[np.where((cls_tgs == gnr_tag))].mean(axis=0))
 
         else:
 
             self.trn_mtrx = trn_mtrx
             self.cls_tgs = cls_tgs
 
-            for gnr_tag in np.unique(cls_gnr_tgs[trn_idxs]):
+            for gnr_tag in np.unique(cls_tgs):
 
                 # # # # # # #
                 shuffled_train_idxs = np.random.permutation(np.where((cls_tgs == gnr_tag)))
@@ -82,7 +79,7 @@ class RFSE(object):
                 bagg_idxs = shuffled_train_idxs[0:bg_trn_ptg]
                 # print bag_idxs
                 self.ci2gtag[i] = gnr_tag
-                gnr_classes.append(trn_mtrx[bagg_idxs].mean(axis=0))
+                self.gnr_classes.append(trn_mtrx[bagg_idxs].mean(axis=0))
 
         # Converting the list to narray.
         self.gnr_classes = np.vstack(self.gnr_classes)
@@ -104,27 +101,27 @@ class RFSE(object):
 
             # Construct Genres Class Vectors form Training Set. In case self.bagging is True.
             if self.bagging:
-                gnr_classes = self.contruct_classes(self.trn_mtrx, self.cls_tgs)
+                self.gnr_classes = self.contruct_classes(self.trn_mtrx, self.cls_tgs)
 
             # Randomly select some of the available features
             feat_subspace = np.random.permutation(mtrx_feat_idxs)[0:self.feat_size]
 
             # Initialized Predicted Classes and Maximum Similarity Scores Array for this i iteration
-            max_sim_inds = np.argmax(
-                self.sim_func(tst_mtrx[:, feat_subspace], gnr_classes[:, feat_subspace]),
-                axis=1
-            )
-            max_sim_scores = tst_mtrx[max_sim_inds]
+            sim_scrs = np.array(self.sim_func(tst_mtrx, self.gnr_classes, feat_subspace))
+            max_sim_inds = np.argmax(sim_scrs, axis=1)
+            max_sim_scores = sim_scrs[np.arange(sim_scrs.shape[0]), max_sim_inds]
 
             # Store Predicted Classes and Scores for this i iteration
             max_sim_scores_per_iter[i, :] = max_sim_scores[:]
             predicted_classes_per_iter[i, :] = np.array([self.ci2gtag[i] for i in max_sim_inds[:]])
 
-        predicted_Y = np.zeros((crossval_X.shape[0]), dtype=np.float)
-        predicted_scores = np.zeros((crossval_X.shape[0]), dtype=np.float)
+        predicted_Y = np.zeros((tst_mtrx.shape[0]), dtype=np.float)
+        predicted_scores = np.zeros((tst_mtrx.shape[0]), dtype=np.float)
 
         for i_prd_cls, prd_cls in enumerate(predicted_classes_per_iter.transpose()):
-            genres_occs = np.histogram(prd_cls.astype(np.int), bins=np.arange(self.gnrs_num+2))[0]
+            genres_occs = np.histogram(
+                prd_cls.astype(np.int), bins=np.arange(len(self.ci2gtag.keys()) + 2)
+            )[0]
             # NOTE: One Bin per Genre plus one i.e the first to be always zero
             # print genres_occs
             genres_probs = genres_occs.astype(np.float) / np.float(self.itrs)
