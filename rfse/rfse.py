@@ -14,27 +14,34 @@ class RFSE(object):
             self.sim_func = cy.cosine_sim
             self.sim_min_value = -1.0
         elif sim_func == 'eucl_sim':
+            print "NOT TESTED - NOT WORKING"
             self.sim_func = cy.eucl_sim
             self.sim_min_value = 0.0
         # elif sim_func == 'minmax_sim':
         #     self.sim_func = cy.minmax_sim
         #     self.sim_min_value = 0.0
         elif sim_func == 'py_cosine_sim':
+            print "NOT TESTED - NOT WORKING"
             self.sim_func = py.cosine_sim
             self.sim_min_value = -1.0
         elif sim_func == 'py_cos_sim_sprs':
+            print "NOT TESTED - NOT WORKING"
             self.sim_func = py.cos_sim_sprs
             self.sim_min_value = -1.0
         elif sim_func == 'py_minmax_sim':
+            print "NOT TESTED - NOT WORKING"
             self.sim_func = py.minmax_sim
             self.sim_min_value = 0.0
         elif sim_func == 'py_jaccard_sim':
+            print "NOT TESTED - NOT WORKING"
             self.sim_func = py.jaccard_sim
             self.sim_min_value = 0.0
         elif sim_func == 'py_hamming_sim':
+            print "NOT TESTED - NOT WORKING"
             self.sim_func = py.hamming_sim
             self.sim_min_value = 0.0
         elif simfunc == 'py_correl_sim':
+            print "NOT TESTED - NOT WORKING"
             self.sim_func = py.correl_sim
             self.sim_min_value = 0.0
 
@@ -56,6 +63,12 @@ class RFSE(object):
     def fit(self, trn_mtrx, cls_tgs):
         # It should be cls_tgs = cls_gnr_tgs[cls_tgs]
         # It should be trn_mtrx corpus_mtrx_lst[cls_tgs]
+
+        # Preventing '0' class-tag usage as Known-class tag.
+        if np.min(cls_tgs) == 0:
+            msg = "Class tag '0' not allowed because 0 class indicates Uknown-Class " +\
+                    "in the Open-set Classification framework"
+            raise Exception(msg)
 
         if not self.bagging:
 
@@ -93,11 +106,11 @@ class RFSE(object):
         mtrx_feat_idxs = np.arange(tst_mtrx.shape[1])
 
         max_sim_scores_per_iter = np.zeros((self.itrs, tst_mtrx.shape[0]))
-        predicted_classes_per_iter = np.zeros((self.itrs, tst_mtrx.shape[0]))
+        predicted_classes_per_iter = np.zeros((self.itrs, tst_mtrx.shape[0]), dtype=np.int)
 
         # Measure similarity for i iterations i.e. for i different feature subspaces Randomly...
         # ...selected
-        for i in range(self.itrs):
+        for i in np.arange(self.itrs):
 
             # Construct Genres Class Vectors form Training Set. In case self.bagging is True.
             if self.bagging:
@@ -113,22 +126,24 @@ class RFSE(object):
 
             # Store Predicted Classes and Scores for this i iteration
             max_sim_scores_per_iter[i, :] = max_sim_scores[:]
-            predicted_classes_per_iter[i, :] = np.array([self.ci2gtag[i] for i in max_sim_inds[:]])
+            predicted_classes_per_iter[i, :] = np.array([self.ci2gtag[j] for j in max_sim_inds[:]])
 
-        predicted_Y = np.zeros((tst_mtrx.shape[0]), dtype=np.float)
-        predicted_scores = np.zeros((tst_mtrx.shape[0]), dtype=np.float)
+        # Getting the Max Score and the respective prediction where the score is gte to the...
+        # ...sigma threshold. If lte than threshold then prediction is 0, i.e 'uknown class'...
+        # ...and the score is set to 0.
+        classes_num = np.max(self.ci2gtag.values()) + 1  # Appeding 1 for '0' class-tag counting.
+        genres_occs = np.apply_along_axis(
+            lambda x: np.bincount(x, minlength=classes_num), axis=0,
+            arr=predicted_classes_per_iter.astype(np.int)
+        )
+        genres_probs = genres_occs / np.float(self.itrs)
 
-        for i_prd_cls, prd_cls in enumerate(predicted_classes_per_iter.transpose()):
-            genres_occs = np.histogram(
-                prd_cls.astype(np.int), bins=np.arange(len(self.ci2gtag.keys()) + 2)
-            )[0]
-            # NOTE: One Bin per Genre plus one i.e the first to be always zero
-            # print genres_occs
-            genres_probs = genres_occs.astype(np.float) / np.float(self.itrs)
-            # print genres_probs
-            if np.max(genres_probs) >= self.sigma:
-                predicted_Y[i_prd_cls] = np.argmax(genres_probs)
-                predicted_scores[i_prd_cls] = np.max(genres_probs)
+        # Getting the scores over sigma, and setting the rest to 0.0.
+        scors_over_sigma = np.where(genres_probs > self.sigma, genres_probs, 0.0)
+
+        # Getting the Max Score and the respective predicted_Y over simga threshold.
+        predicted_Y = np.argmax(scors_over_sigma, axis=0)
+        predicted_scores = np.max(scors_over_sigma, axis=0)
 
         return predicted_Y, predicted_scores, max_sim_scores_per_iter, predicted_classes_per_iter
 
@@ -136,6 +151,8 @@ class RFSE(object):
 class RFSEDMPG(RFSE):
 
     def __init__(self, *args, **kwrgs):
+
+        print "NOT TESTED - NOT WORKING"
 
         # Initializing RFSE.
         super(RFSEDMPG, self).__init__(*args, **kwrgs)
@@ -262,56 +279,3 @@ class RFSEDMPG(RFSE):
                 predicted_scores[i_prd_cls] = np.max(genres_probs)
 
         return predicted_Y, predicted_scores, max_sim_scores_per_iter, predicted_classes_per_iter
-
-
-def cosine_similarity(vector, centroid):
-
-    # Convert Arrays and Matrices to Matrix Type for preventing unexpected error, such as...
-    # ...returning vector instead of scalar
-    vector = np.matrix(vector)
-    centroid = np.matrix(centroid)
-
-    return vector * np.transpose(centroid) / (np.linalg.norm(vector) * np.linalg.norm(centroid))
-
-
-def cosine_similarity_sparse(vector, centroid):
-
-    return cosine_similarity(vector.todense(), centroid)
-
-
-def minmax_similarity(v1, v2):
-
-    return np.sum(np.min(np.vstack((v1, v2)), axis=0)) / np.sum(np.max(np.vstack((v1, v2)), axis=0))
-
-
-def jaccard_similarity_binconv(v0, v1):
-
-    v0 = np.where((v0 > 0), 1, 0)
-    v1 = np.where((v0 > 0), 1, 0)
-
-    return 1.0 - spd.jaccard(v0, v1)
-
-
-def hamming_similarity(vector, centroid):
-
-    return 1.0 - spd.hamming(centroid, vector)
-
-
-def correlation_similarity(vector, centroid):
-
-    vector = vector[0]
-    centroid = np.array(centroid)[0]
-
-    vector_ = np.where(vector > 0, 0, 1)
-    centroid_ = np.where(centroid > 0, 0, 1)
-
-    s11 = np.dot(vector, centroid)
-    s00 = np.dot(vector_, centroid_)
-    s01 = np.dot(vector_, centroid)
-    s10 = np.dot(vector, centroid_)
-
-    denom = np.sqrt((s10+s11)*(s01+s00)*(s11+s01)*(s00+s10))
-    if denom == 0.0:
-        denom = 1.0
-
-    return (s11*s00 - s01*s10) / denom
