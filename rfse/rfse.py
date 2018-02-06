@@ -17,9 +17,9 @@ class RFSE(object):
             print "NOT TESTED - NOT WORKING"
             self.sim_func = cy.eucl_sim
             self.sim_min_value = 0.0
-        # elif sim_func == 'minmax_sim':
-        #     self.sim_func = cy.minmax_sim
-        #     self.sim_min_value = 0.0
+        elif sim_func == 'minmax_sim':
+            self.sim_func = cy.minmax_sim
+            self.sim_min_value = 0.0
         elif sim_func == 'py_cosine_sim':
             print "NOT TESTED - NOT WORKING"
             self.sim_func = py.cosine_sim
@@ -29,7 +29,7 @@ class RFSE(object):
             self.sim_func = py.cos_sim_sprs
             self.sim_min_value = -1.0
         elif sim_func == 'py_minmax_sim':
-            print "NOT TESTED - NOT WORKING"
+            # print "NOT TESTED - NOT WORKING"
             self.sim_func = py.minmax_sim
             self.sim_min_value = 0.0
         elif sim_func == 'py_jaccard_sim':
