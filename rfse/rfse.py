@@ -78,10 +78,12 @@ class RFSE(object):
 
         else:
 
+            raise Exception("Bagging Mode preventing usage reason: Code not tested yet.")
+
             self.trn_mtrx = trn_mtrx
             self.cls_tgs = cls_tgs
 
-            for gnr_tag in np.unique(cls_tgs):
+            for i, gnr_tag in enumerate(np.unique(cls_tgs)):
 
                 # # # # # # #
                 shuffled_train_idxs = np.random.permutation(np.where((cls_tgs == gnr_tag)))
