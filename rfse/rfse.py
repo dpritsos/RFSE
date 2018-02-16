@@ -12,38 +12,29 @@ class RFSE(object):
 
         if sim_func == 'cosine_sim':
             self.sim_func = cy.cosine_sim
-            self.sim_min_value = -1.0
         elif sim_func == 'eucl_sim':
             print "NOT TESTED - NOT WORKING"
             self.sim_func = cy.eucl_sim
-            self.sim_min_value = 0.0
         elif sim_func == 'minmax_sim':
             self.sim_func = cy.minmax_sim
-            self.sim_min_value = 0.0
         elif sim_func == 'py_cosine_sim':
             print "NOT TESTED - NOT WORKING"
             self.sim_func = py.cosine_sim
-            self.sim_min_value = -1.0
         elif sim_func == 'py_cos_sim_sprs':
             print "NOT TESTED - NOT WORKING"
             self.sim_func = py.cos_sim_sprs
-            self.sim_min_value = -1.0
         elif sim_func == 'py_minmax_sim':
             # print "NOT TESTED - NOT WORKING"
             self.sim_func = py.minmax_sim
-            self.sim_min_value = 0.0
         elif sim_func == 'py_jaccard_sim':
             print "NOT TESTED - NOT WORKING"
             self.sim_func = py.jaccard_sim
-            self.sim_min_value = 0.0
         elif sim_func == 'py_hamming_sim':
             print "NOT TESTED - NOT WORKING"
             self.sim_func = py.hamming_sim
-            self.sim_min_value = 0.0
         elif simfunc == 'py_correl_sim':
             print "NOT TESTED - NOT WORKING"
             self.sim_func = py.correl_sim
-            self.sim_min_value = 0.0
 
         if bagging:
             print 'Init: RFSE with Bagging'
