@@ -111,15 +111,11 @@ cpdef double [:, ::1] minmax_sim(double [:, ::1] m1, double [:, ::1] m2, Py_ssiz
 
         # Matrices dimentions intilized variables.
         Py_ssize_t m1_I = m1.shape[0]
-        Py_ssize_t m1_J = m1.shape[1]
         Py_ssize_t m2_I = m2.shape[0]
-        Py_ssize_t m2_J = m2.shape[1]
         Py_ssize_t ci_I = ci.shape[0]
 
         # MemoryViews for the cython arrays used for sotring the temporary and...
         # ...to be retured results.
-        double [::1] m1_norms
-        double [::1] m2_norms
         double [:, ::1] cssim_vect
 
     # Creating the temporary cython arrays.
