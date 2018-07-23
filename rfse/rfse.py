@@ -55,6 +55,10 @@ class RFSE(object):
         # It should be cls_tgs = cls_gnr_tgs[cls_tgs]
         # It should be trn_mtrx corpus_mtrx_lst[cls_tgs]
 
+        # ########## Temporary Foat -to-> Double Patch ###########
+        trn_mtrx = np.array(trn_mtrx, dtype=np.float)
+        # #########################################################
+
         # Preventing '0' class-tag usage as Known-class tag.
         if np.min(cls_tgs) == 0:
             msg = "Class tag '0' not allowed because 0 class indicates Uknown-Class " +\
@@ -95,6 +99,10 @@ class RFSE(object):
     def predict(self, tst_mtrx):
         # It should be tst_mtrx = corpus_mtrx[crv_idxs]
         # It should be cls_tgs = cls_gnr_tgs[crv_idxs]
+
+        # ########## Temporary Foat -to-> Double Patch ###########
+        tst_mtrx = np.array(tst_mtrx, dtype=np.float)
+        # #########################################################
 
         mtrx_feat_idxs = np.arange(tst_mtrx.shape[1])
 
